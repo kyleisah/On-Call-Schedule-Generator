@@ -707,6 +707,26 @@
     return { order, anchorWeek: best.weekIndex, anchorTechId: best.techId };
   }
 
+  // Splits a zone's timeline into stretches that share one continuous rotation
+  // order (each "onward" swap starts a new stretch). Used to build one
+  // recurring calendar series per technician per stretch, instead of one
+  // event per week, so a whole run of normal turns can be deleted in a
+  // single action from a calendar app.
+  function zoneRotationSegments(zone, weeks){
+    const zoneAnchors = state.anchors
+      .filter(a => a.zoneId === zone.id && a.weekIndex < weeks)
+      .map(a => a.weekIndex);
+    const boundaries = [...new Set([0, ...zoneAnchors])].sort((a,b) => a - b);
+    const segments = [];
+    boundaries.forEach((segStart, i) => {
+      const segEnd = (i + 1 < boundaries.length) ? boundaries[i+1] - 1 : weeks - 1;
+      if(segEnd < segStart) return;
+      const { order, anchorWeek, anchorTechId } = effectiveOrderForWeek(zone, segStart);
+      segments.push({ segStart, segEnd, order, anchorWeek, anchorTechId });
+    });
+    return segments;
+  }
+
   function computeSchedule(weeks){
     const startInput = state.scheduleStart ? parseISODate(state.scheduleStart) : todayUTCDateOnly();
     const effectiveStart = getMondayOfWeek(startInput);
@@ -856,28 +876,104 @@
     return out;
   }
   function dtStampNow(){ return new Date().toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z'; }
+
+  function eventDescription(techName, zoneName, row){
+    let description = 'Technician: ' + techName + '\nZone: ' + zoneName;
+    if(row.holidayLabels.length > 0) description += '\nObserved Holiday: ' + row.holidayLabels.join(', ');
+    if(row.isOverride) description += '\nNote: Covering an adjusted shift';
+    return description;
+  }
+  function pushStandaloneEvent(lines, zone, row){
+    if(!row.tech) return;
+    const summary = 'On-Call: ' + row.tech.name + ' - ' + zone.name;
+    lines.push('BEGIN:VEVENT');
+    lines.push(foldICSLine('UID:' + nextId('oncall') + '@duty-roster-generator'));
+    lines.push('DTSTAMP:' + dtStampNow());
+    lines.push('DTSTART;VALUE=DATE:' + toICSDate(row.start));
+    lines.push('DTEND;VALUE=DATE:' + toICSDate(row.end));
+    lines.push(foldICSLine('SUMMARY:' + escapeICSText(summary)));
+    lines.push(foldICSLine('DESCRIPTION:' + escapeICSText(eventDescription(row.tech.name, zone.name, row))));
+    lines.push('TRANSP:TRANSPARENT');
+    lines.push(row.holidayLabels.length > 0 ? 'CATEGORIES:ON-CALL,HOLIDAY' : 'CATEGORIES:ON-CALL');
+    lines.push('END:VEVENT');
+  }
+
+  /* Builds ONE recurring VEVENT (RRULE) per technician for each unbroken
+     stretch of their NORMAL turns in a zone, so deleting that single event
+     in a calendar app removes every future occurrence at once. Weeks with a
+     holiday note or a manual swap are pulled out (via EXDATE) and exported
+     as individual events instead, since a recurring series can't carry
+     per-occurrence text and those are the weeks someone would want to
+     review individually anyway. Onward swaps naturally split the series,
+     since they start a new rotation segment. */
   function buildICS(weeks){
     const { byZone } = computeSchedule(weeks);
     const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Duty Roster On-Call Generator//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+
     state.zones.forEach(zone => {
-      (byZone[zone.id] || []).forEach(row => {
-        if(!row.tech) return;
-        const summary = 'On-Call: ' + row.tech.name + ' - ' + zone.name;
-        let description = 'Technician: ' + row.tech.name + '\nZone: ' + zone.name;
-        if(row.holidayLabels.length > 0) description += '\nObserved Holiday: ' + row.holidayLabels.join(', ');
-        if(row.isOverride) description += '\nNote: Covering an adjusted shift';
-        lines.push('BEGIN:VEVENT');
-        lines.push(foldICSLine('UID:' + nextId('oncall') + '@duty-roster-generator'));
-        lines.push('DTSTAMP:' + dtStampNow());
-        lines.push('DTSTART;VALUE=DATE:' + toICSDate(row.start));
-        lines.push('DTEND;VALUE=DATE:' + toICSDate(row.end));
-        lines.push(foldICSLine('SUMMARY:' + escapeICSText(summary)));
-        lines.push(foldICSLine('DESCRIPTION:' + escapeICSText(description)));
-        lines.push('TRANSP:TRANSPARENT');
-        lines.push(row.holidayLabels.length > 0 ? 'CATEGORIES:ON-CALL,HOLIDAY' : 'CATEGORIES:ON-CALL');
-        lines.push('END:VEVENT');
+      const rows = byZone[zone.id] || [];
+      if(rows.length === 0) return;
+
+      const coveredByRecurring = new Set();
+      const segments = zoneRotationSegments(zone, weeks);
+
+      segments.forEach(seg => {
+        const { segStart, segEnd, order, anchorWeek, anchorTechId } = seg;
+        const L = order.length;
+        if(L === 0) return;
+        let idx0 = order.findIndex(id => id === anchorTechId);
+        if(idx0 === -1) idx0 = 0;
+
+        order.forEach((techId, posInOrder) => {
+          const tech = techById(techId);
+          if(!tech) return;
+
+          const diff = ((posInOrder - idx0) % L + L) % L;
+          let firstW = anchorWeek + diff;
+          while(firstW < segStart) firstW += L;
+
+          const occurrences = [];
+          for(let w = firstW; w <= segEnd; w += L) occurrences.push(w);
+          if(occurrences.length === 0) return;
+
+          const cleanWeeks = occurrences.filter(w => rows[w] && !rows[w].isOverride && rows[w].holidayLabels.length === 0);
+          if(cleanWeeks.length < 2) return; // too few to bother with a series; handled as standalone below
+
+          const firstClean = cleanWeeks[0];
+          const lastClean = cleanWeeks[cleanWeeks.length - 1];
+          const count = Math.round((lastClean - firstClean) / L) + 1;
+          const excluded = [];
+          for(let w = firstClean; w <= lastClean; w += L){
+            if(!cleanWeeks.includes(w)) excluded.push(w);
+          }
+
+          const summary = 'On-Call: ' + tech.name + ' - ' + zone.name;
+          const description = 'Technician: ' + tech.name + '\nZone: ' + zone.name;
+          lines.push('BEGIN:VEVENT');
+          lines.push(foldICSLine('UID:' + nextId('oncall') + '@duty-roster-generator'));
+          lines.push('DTSTAMP:' + dtStampNow());
+          lines.push('DTSTART;VALUE=DATE:' + toICSDate(rows[firstClean].start));
+          lines.push('DTEND;VALUE=DATE:' + toICSDate(rows[firstClean].end));
+          lines.push('RRULE:FREQ=WEEKLY;INTERVAL=' + L + ';COUNT=' + count);
+          if(excluded.length > 0){
+            lines.push(foldICSLine('EXDATE;VALUE=DATE:' + excluded.map(w => toICSDate(rows[w].start)).join(',')));
+          }
+          lines.push(foldICSLine('SUMMARY:' + escapeICSText(summary)));
+          lines.push(foldICSLine('DESCRIPTION:' + escapeICSText(description)));
+          lines.push('TRANSP:TRANSPARENT');
+          lines.push('CATEGORIES:ON-CALL');
+          lines.push('END:VEVENT');
+
+          cleanWeeks.forEach(w => coveredByRecurring.add(w));
+        });
+      });
+
+      rows.forEach(row => {
+        if(coveredByRecurring.has(row.weekIndex)) return;
+        pushStandaloneEvent(lines, zone, row);
       });
     });
+
     lines.push('END:VCALENDAR');
     return lines.join('\r\n');
   }

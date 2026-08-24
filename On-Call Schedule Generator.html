@@ -1,0 +1,1903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Duty Roster — On-Call Schedule Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #10141a;
+    --bg-panel: #1a2029;
+    --bg-panel-raised: #212936;
+    --bg-inset: #0c1015;
+    --border: #2b3543;
+    --border-strong: #3c4a5c;
+    --text: #e9edf2;
+    --text-muted: #8d99a8;
+    --text-faint: #5c6878;
+    --accent: #f5a524;
+    --accent-dim: #b9821f;
+    --accent-soft: rgba(245,165,36,0.14);
+    --danger: #e5575c;
+    --danger-soft: rgba(229,87,92,0.14);
+    --success: #45cf95;
+    --radius: 10px;
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+
+  *{ box-sizing: border-box; min-width: 0; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(1100px 600px at 12% -10%, rgba(245,165,36,0.05), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+  ::selection{ background: var(--accent-soft); color: var(--text); }
+  :focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+  a{ color: var(--accent); }
+
+  h1,h2,h3{ font-family: var(--font-display); margin:0; letter-spacing: -0.01em; }
+
+  button{ font-family: var(--font-body); cursor:pointer; }
+  input, select{ font-family: var(--font-body); }
+
+  .eyebrow{
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+
+  /* ---------- Header ---------- */
+  header.top{
+    border-bottom: 1px solid var(--border);
+    padding: 22px clamp(16px, 4vw, 40px);
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    position: sticky;
+    top:0;
+    background: rgba(16,20,26,0.92);
+    backdrop-filter: blur(8px);
+    z-index: 20;
+  }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand-mark{
+    width: 34px; height: 34px; border-radius: 8px;
+    background: linear-gradient(155deg, var(--accent), #d4890f);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.2), 0 4px 14px rgba(245,165,36,0.25);
+    flex-shrink:0;
+  }
+  .brand-mark svg{ width:18px; height:18px; }
+  .brand-text h1{ font-size: 17px; }
+  .brand-text .eyebrow{ margin-top:2px; }
+
+  .status-clock{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align:right;
+  }
+  .status-clock strong{ color: var(--text); font-weight:600; }
+
+  /* ---------- Layout ---------- */
+  .app{
+    display:grid;
+    grid-template-columns: 360px minmax(0, 1fr);
+    gap: 22px;
+    padding: 22px clamp(16px, 4vw, 40px) 60px;
+    max-width: 1400px;
+    margin: 0 auto;
+    align-items:start;
+  }
+  @media (max-width: 980px){
+    .app{ grid-template-columns: minmax(0,1fr); }
+  }
+  main{ min-width:0; }
+
+  .panel{
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+  .panel + .panel{ margin-top: 16px; }
+  .panel-head{
+    display:flex; align-items:baseline; justify-content:space-between; gap:10px;
+    margin-bottom: 14px;
+  }
+  .panel-head h2{ font-size: 14px; }
+  .panel-head .count{ font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+
+  .field{ margin-bottom: 12px; }
+  .field:last-child{ margin-bottom: 0; }
+  .field label{
+    display:block; font-size: 11.5px; color: var(--text-muted);
+    margin-bottom: 5px; font-weight: 500;
+  }
+  .field input[type=text], .field input[type=date], .field input[type=number], .field select{
+    width:100%;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 7px;
+    padding: 8px 10px;
+    font-size: 13.5px;
+  }
+  .field input:hover, .field select:hover{ border-color: var(--border-strong); }
+  .field input:focus, .field select:focus{ border-color: var(--accent); }
+  .field .hint{ font-size: 11px; color: var(--text-faint); margin-top: 5px; font-family: var(--font-mono); }
+  .radio-row{ display:flex; flex-direction:column; gap:8px; }
+  .radio-opt{
+    display:flex; align-items:flex-start; gap:9px; background: var(--bg-inset);
+    border:1px solid var(--border); border-radius:7px; padding:9px 10px; cursor:pointer;
+  }
+  .radio-opt:hover{ border-color: var(--border-strong); }
+  .radio-opt input{ margin-top:2px; accent-color: var(--accent); }
+  .radio-opt .rt{ font-size:13px; font-weight:500; }
+  .radio-opt .rd{ font-size:11.5px; color: var(--text-faint); margin-top:2px; }
+  .radio-opt.checked{ border-color: var(--accent-dim); background: var(--accent-soft); }
+
+  .btn{
+    border-radius: 7px; border: 1px solid var(--border-strong);
+    background: var(--bg-panel-raised); color: var(--text);
+    padding: 8px 14px; font-size: 13px; font-weight: 500;
+    transition: border-color .15s ease, background .15s ease, transform .05s ease;
+  }
+  .btn:hover{ border-color: var(--accent-dim); }
+  .btn:active{ transform: translateY(1px); }
+  .btn:disabled{ opacity:0.45; cursor:not-allowed; }
+  .btn-primary{
+    background: var(--accent); border-color: var(--accent); color: #241a07; font-weight:600;
+  }
+  .btn-primary:hover{ background:#ffb43d; border-color:#ffb43d; }
+  .btn-block{ width:100%; }
+  .btn-ghost{ background: transparent; border-color: var(--border); }
+  .btn-sm{ padding: 5px 9px; font-size: 12px; border-radius:6px; }
+  .btn-icon{
+    width: 26px; height: 26px; padding:0; display:inline-flex; align-items:center; justify-content:center;
+    background: transparent; border: 1px solid var(--border); border-radius:6px; color: var(--text-muted);
+    flex-shrink:0;
+  }
+  .btn-icon:hover{ color: var(--text); border-color: var(--border-strong); }
+  .btn-danger:hover{ color: var(--danger); border-color: var(--danger); }
+
+  .add-row{ display:flex; gap:8px; }
+  .add-row input{ flex:1; }
+
+  /* Zone chips */
+  .zone-list{ display:flex; flex-direction:column; gap:8px; }
+  .zone-chip{
+    display:flex; align-items:center; gap:7px;
+    background: var(--bg-inset); border:1px solid var(--border); border-radius:7px;
+    padding: 7px 8px 7px 10px;
+  }
+  .zone-dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; box-shadow: 0 0 0 3px rgba(255,255,255,0.03); }
+  .zone-color-input{
+    width:16px; height:16px; padding:0; border:none; border-radius:50%; cursor:pointer;
+    -webkit-appearance:none; appearance:none; background:none; overflow:hidden; flex-shrink:0;
+  }
+  .zone-color-input::-webkit-color-swatch-wrapper{ padding:0; }
+  .zone-color-input::-webkit-color-swatch{ border:1px solid rgba(255,255,255,0.15); border-radius:50%; }
+  .zone-color-input::-moz-color-swatch{ border:1px solid rgba(255,255,255,0.15); border-radius:50%; }
+  .zone-chip .zname{
+    flex:1; font-size:13px; font-weight:500; padding:3px 5px; border-radius:5px; border:1px solid transparent; cursor:text;
+  }
+  .zone-chip .zname:hover{ border-color: var(--border); background: var(--bg-panel); }
+  .zone-chip .zname-input{
+    flex:1; font-size:13px; font-weight:500; background: var(--bg-panel-raised); border:1px solid var(--accent);
+    border-radius:5px; padding:3px 5px; color: var(--text); font-family: var(--font-body);
+  }
+  .zone-chip .zcount{ font-family: var(--font-mono); font-size:11px; color: var(--text-faint); flex-shrink:0; }
+  .zone-chip .zactions{ display:flex; gap:4px; flex-shrink:0; }
+
+  /* Technician groups */
+  .tech-group{ margin-bottom: 12px; }
+  .tech-group:last-child{ margin-bottom:0; }
+  .tech-group-head{
+    display:flex; align-items:center; gap:7px; margin-bottom:7px;
+    font-size: 11.5px; color: var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.05em;
+  }
+  .tech-item{
+    display:flex; align-items:center; gap:8px;
+    padding: 6px 8px; border-radius:6px;
+    border: 1px solid transparent;
+  }
+  .tech-item:hover{ background: var(--bg-inset); border-color: var(--border); }
+  .tech-item .order-badge{
+    font-family: var(--font-mono); font-size:10.5px; color: var(--text-faint);
+    width:16px; text-align:center; flex-shrink:0;
+  }
+  .tech-item .tname{
+    flex:1; font-size: 13px; padding:3px 5px; border-radius:5px; border:1px solid transparent;
+    cursor:text;
+  }
+  .tech-item .tname:hover{ border-color: var(--border); background: var(--bg-panel); }
+  .tech-item .tname-input{
+    flex:1; font-size:13px; background: var(--bg-panel-raised); border:1px solid var(--accent);
+    border-radius:5px; padding:3px 5px; color: var(--text); font-family: var(--font-body);
+  }
+  .tech-item .tactions{ display:flex; gap:4px; opacity:0; transition:opacity .1s; }
+  .tech-item:hover .tactions{ opacity:1; }
+  .empty-note{ font-size:12px; color: var(--text-faint); font-style:italic; padding: 4px 2px; }
+
+  /* Holidays */
+  .holiday-list{ display:flex; flex-direction:column; gap:6px; margin-top:12px; }
+  .holiday-item{
+    display:flex; align-items:center; gap:9px;
+    background: var(--bg-inset); border:1px solid var(--border); border-radius:7px;
+    padding: 7px 10px;
+  }
+  .holiday-item .hdate{ font-family: var(--font-mono); font-size:11.5px; color: var(--accent); flex-shrink:0; cursor:text; padding:2px 4px; border-radius:4px; }
+  .holiday-item .hlabel{ flex:1; font-size:13px; cursor:text; padding:2px 4px; border-radius:4px; }
+  .holiday-item .hdate:hover, .holiday-item .hlabel:hover{ background: var(--bg-panel); }
+  .holiday-item.editing{ flex-wrap:wrap; }
+  .holiday-item .hdate-input{
+    font-family: var(--font-mono); font-size:11.5px; background: var(--bg-panel-raised); border:1px solid var(--accent);
+    border-radius:5px; padding:4px 6px; color: var(--text); width:132px;
+  }
+  .holiday-item .hlabel-input{
+    flex:1; min-width:90px; font-size:13px; background: var(--bg-panel-raised); border:1px solid var(--accent);
+    border-radius:5px; padding:4px 6px; color: var(--text); font-family: var(--font-body);
+  }
+
+  /* ---------- Main / output column ---------- */
+  .now-strip{
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:12px;
+    margin-bottom: 18px;
+  }
+  .now-card{
+    background: var(--bg-panel); border:1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px; position:relative; overflow:hidden;
+  }
+  .now-card::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background: var(--zc, var(--accent));
+  }
+  .now-card .eyebrow{ display:flex; align-items:center; gap:6px; }
+  .live-dot{
+    width:7px; height:7px; border-radius:50%; background: var(--success);
+    box-shadow: 0 0 0 0 rgba(69,207,149,0.6);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse{
+    0%{ box-shadow: 0 0 0 0 rgba(69,207,149,0.55); }
+    70%{ box-shadow: 0 0 0 7px rgba(69,207,149,0); }
+    100%{ box-shadow: 0 0 0 0 rgba(69,207,149,0); }
+  }
+  .now-card .who{ font-family: var(--font-display); font-size: 18px; margin-top:6px; font-weight:600; }
+  .now-card .zone-name{ font-size:12px; color: var(--text-muted); margin-top:2px; }
+
+  .board-panel{ background: var(--bg-panel); border:1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 18px; min-width:0; }
+  .board-panel .panel-head{ margin-bottom: 16px; }
+  .board-panel .panel-head p{ margin:2px 0 0; font-size:12px; color: var(--text-faint); font-family: var(--font-mono); }
+
+  .zone-board{ margin-bottom: 22px; min-width:0; }
+  .zone-board:last-child{ margin-bottom:0; }
+  .zone-board-head{ display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+  .zone-board-head .zname{ font-family: var(--font-display); font-weight:600; font-size:14.5px; }
+  .badge{
+    font-family: var(--font-mono); font-size:10.5px; padding:2px 7px; border-radius:20px;
+    border:1px solid var(--border-strong); color: var(--text-muted);
+  }
+
+  /* The tape is the ONLY thing that scrolls horizontally -- everything
+     ancestor of it is constrained (min-width:0) so the page itself never
+     stretches or gains a horizontal scrollbar. */
+  .tape{
+    display:flex; gap:7px; overflow-x:auto; overflow-y: visible; padding: 4px 2px 12px;
+    scrollbar-width: thin; min-width:0; position:relative;
+  }
+  .tape::-webkit-scrollbar{ height:6px; }
+  .tape::-webkit-scrollbar-thumb{ background: var(--border-strong); border-radius:3px; }
+
+  .week-chip{
+    flex: 0 0 auto; width: 116px;
+    background: var(--bg-inset); border:1px solid var(--border); border-radius:8px;
+    padding: 8px 9px; position:relative;
+  }
+  .week-chip.is-today{ border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .week-chip.is-override{ border-style: dashed; border-color: var(--accent-dim); }
+  .week-chip .wk-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:4px; }
+  .week-chip .wk-num{ font-family: var(--font-mono); font-size:10px; color: var(--text-faint); }
+  .week-chip .wk-date{ font-family: var(--font-mono); font-size:10.5px; color: var(--text-muted); margin-top:3px; }
+  .week-chip .wk-tech{ font-size:12.5px; font-weight:600; margin-top:7px; line-height:1.25; }
+  .week-chip .wk-air{
+    width:6px; height:6px; border-radius:50%; margin-top:3px;
+    background: var(--success); animation: pulse 2s infinite; flex-shrink:0;
+  }
+  .week-chip .wk-holiday{
+    margin-top:6px; font-size:10px; color: var(--accent); font-family: var(--font-mono);
+    display:flex; align-items:center; gap:4px;
+  }
+  .week-chip .wk-swap-btn{
+    width:20px; height:20px; border-radius:5px; border:1px solid var(--border); background: var(--bg-panel-raised);
+    color: var(--text-muted); font-size:11px; display:flex; align-items:center; justify-content:center;
+    flex-shrink:0; padding:0;
+  }
+  .week-chip .wk-swap-btn:hover{ color: var(--accent); border-color: var(--accent-dim); }
+  .week-chip .wk-tag{
+    margin-top:6px; font-size:9px; font-family: var(--font-mono); text-transform:uppercase; letter-spacing:.05em;
+    color: var(--accent-dim); background: var(--accent-soft); display:inline-block; padding:1px 5px; border-radius:3px;
+  }
+
+  .adjust-list{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .adjust-chip{
+    display:flex; align-items:center; gap:6px; font-size:11.5px;
+    background: var(--bg-inset); border:1px solid var(--border); border-radius:20px; padding:4px 6px 4px 10px;
+  }
+  .adjust-chip .btn-icon{ width:18px; height:18px; border:none; }
+
+  .coverage-table{ width:100%; border-collapse: collapse; margin-top: 6px; }
+  .coverage-table th{
+    text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em;
+    color: var(--text-faint); font-weight:600; padding: 6px 10px; border-bottom:1px solid var(--border);
+  }
+  .coverage-table td{
+    padding: 9px 10px; font-size:13px; border-bottom:1px solid var(--border);
+  }
+  .coverage-table tr:last-child td{ border-bottom:none; }
+  .coverage-table .oob{ color: var(--text-faint); font-style:italic; font-size:12px; }
+  .table-scroll{ overflow-x:auto; min-width:0; }
+
+  .export-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .export-row .btn{ flex:1; min-width:180px; }
+  .import-row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .import-row input[type=file]{
+    flex:1; min-width:180px; font-size:12.5px; color: var(--text-muted);
+    background: var(--bg-inset); border:1px solid var(--border); border-radius:7px; padding:7px 9px;
+  }
+  .import-row input[type=file]::file-selector-button{
+    background: var(--bg-panel-raised); color: var(--text); border:1px solid var(--border-strong);
+    border-radius:5px; padding:5px 9px; font-size:12px; margin-right:8px; cursor:pointer;
+  }
+
+  .msg{
+    font-size:12.5px; border-radius:7px; padding:9px 11px; margin-top:10px;
+    border:1px solid var(--border);
+  }
+  .msg.warn{ background: var(--danger-soft); border-color: rgba(229,87,92,0.4); color:#ffb3b6; }
+  .msg.ok{ background: rgba(69,207,149,0.1); border-color: rgba(69,207,149,0.35); color:#a9f0d3; }
+  .msg.info{ background: var(--accent-soft); border-color: rgba(245,165,36,0.35); color:#ffd28a; }
+
+  footer.foot{
+    text-align:center; padding: 30px 20px 40px; color: var(--text-faint); font-size:11.5px;
+    font-family: var(--font-mono);
+  }
+
+  .divider{ height:1px; background: var(--border); margin: 14px 0; border:none; }
+
+  /* ---------- Swap modal ---------- */
+  .modal-overlay{
+    position:fixed; inset:0; background: rgba(8,10,14,0.72); backdrop-filter: blur(2px);
+    display:flex; align-items:center; justify-content:center; z-index: 100; padding: 20px;
+  }
+  .modal-overlay[hidden]{ display:none; }
+  .modal{
+    background: var(--bg-panel); border:1px solid var(--border-strong); border-radius: 12px;
+    width: 100%; max-width: 440px; max-height: 90vh; overflow-y:auto;
+    padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .modal h3{ font-size:15px; }
+  .modal .modal-sub{ font-size:12px; color: var(--text-faint); font-family: var(--font-mono); margin-top:4px; }
+  .modal .divider{ margin: 16px 0; }
+  .current-box{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background: var(--bg-inset); border:1px solid var(--border); border-radius:8px; padding:10px 12px;
+    margin-top: 14px;
+  }
+  .current-box .cb-label{ font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color: var(--text-faint); }
+  .current-box .cb-name{ font-size:14px; font-weight:600; margin-top:2px; }
+  .suggestion-wrap{ margin-top: 14px; }
+  .suggestion-wrap .sw-label{ font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color: var(--accent); margin-bottom:7px; }
+  .suggestion-box{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    background: var(--accent-soft); border:1px solid rgba(245,165,36,0.35); border-radius:8px; padding:10px 12px;
+  }
+  .suggestion-box + .suggestion-box{ margin-top:8px; }
+  .suggestion-box .sb-name{ font-size:14px; font-weight:600; }
+  .suggestion-box .sb-meta{ font-size:11px; color: var(--text-muted); margin-top:2px; font-family: var(--font-mono); }
+  .modal-actions{ display:flex; gap:8px; margin-top:18px; }
+  .modal-actions .btn{ flex:1; }
+  .modal-close{
+    position:absolute; top:14px; right:14px;
+  }
+  .modal{ position:relative; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <div class="brand-mark">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="9" stroke="#1a1204" stroke-width="1.6"/>
+        <path d="M12 7v5l3.2 2" stroke="#1a1204" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <h1>Duty Roster</h1>
+      <div class="eyebrow">On-Call Schedule Generator</div>
+    </div>
+  </div>
+  <div class="status-clock" id="clockDisplay">—</div>
+</header>
+
+<div class="app">
+
+  <!-- ============ CONFIG SIDEBAR ============ -->
+  <aside>
+
+    <!-- Zones -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Zones</h2>
+        <span class="count" id="zoneCount">0</span>
+      </div>
+      <div class="add-row">
+        <input type="text" id="zoneNameInput" placeholder="e.g. East" maxlength="40" />
+        <button class="btn btn-primary" id="addZoneBtn">Add</button>
+      </div>
+      <div class="divider"></div>
+      <div class="zone-list" id="zoneList"></div>
+    </div>
+
+    <!-- Technicians -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Technicians</h2>
+        <span class="count" id="techCount">0</span>
+      </div>
+      <div class="field">
+        <label for="techNameInput">Technician name</label>
+        <input type="text" id="techNameInput" placeholder="e.g. Jordan Reyes" maxlength="60" />
+      </div>
+      <div class="field">
+        <label for="techZoneSelect">Assign to zone</label>
+        <select id="techZoneSelect"></select>
+      </div>
+      <button class="btn btn-primary btn-block" id="addTechBtn">Add technician</button>
+      <div class="hint">Order added = rotation order. Use ↑ / ↓ to reorder, click a name to rename.</div>
+      <div class="divider"></div>
+      <div id="techGroups"></div>
+    </div>
+
+    <!-- Schedule settings -->
+    <div class="panel">
+      <div class="panel-head"><h2>Schedule</h2></div>
+      <div class="field">
+        <label for="startDateInput">Rotation start date</label>
+        <input type="date" id="startDateInput" />
+        <div class="hint" id="effectiveStartHint">Effective start: —</div>
+      </div>
+      <div class="field">
+        <label for="weeksInput">Weeks to generate</label>
+        <input type="number" id="weeksInput" min="1" max="260" value="52" />
+        <div class="hint" id="weeksEndHint">Generates through: —</div>
+        <div class="hint">Calendar covers Monday 12:00 AM – Sunday midnight, each week.</div>
+      </div>
+    </div>
+
+    <!-- Holidays -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Observed holidays</h2>
+        <span class="count" id="holidayCount">0</span>
+      </div>
+      <div class="field">
+        <label for="holidayDateInput">Date</label>
+        <input type="date" id="holidayDateInput" />
+      </div>
+      <div class="field">
+        <label for="holidayLabelInput">Holiday name</label>
+        <input type="text" id="holidayLabelInput" placeholder="e.g. Thanksgiving" maxlength="60" />
+      </div>
+      <button class="btn btn-primary btn-block" id="addHolidayBtn">Add holiday</button>
+      <div class="holiday-list" id="holidayList"></div>
+    </div>
+
+  </aside>
+
+  <!-- ============ MAIN OUTPUT ============ -->
+  <main>
+
+    <div class="now-strip" id="nowStrip"></div>
+
+    <div class="board-panel">
+      <div class="panel-head">
+        <div>
+          <h2>Duty board</h2>
+        </div>
+        <button class="btn btn-sm" id="jumpToTodayBtn">Jump to current week</button>
+      </div>
+      <div id="boardBody"></div>
+    </div>
+
+    <div class="board-panel" id="holidayCoveragePanel" style="display:none;">
+      <div class="panel-head">
+        <div>
+          <h2>Holiday coverage</h2>
+          <p>Who's on call for each observed holiday</p>
+        </div>
+      </div>
+      <div class="table-scroll"><table class="coverage-table" id="coverageTable"></table></div>
+    </div>
+
+    <div class="board-panel">
+      <div class="panel-head">
+        <div>
+          <h2>Export</h2>
+          <p>Download the full on-call calendar, or a spreadsheet copy</p>
+        </div>
+      </div>
+      <div class="export-row">
+        <button class="btn btn-primary" id="downloadBtn">Download .ics file</button>
+        <button class="btn" id="downloadXlsxBtn">Download spreadsheet (.xlsx)</button>
+      </div>
+      <div id="downloadMsg"></div>
+
+      <div class="divider"></div>
+
+      <div class="panel-head" style="margin-bottom:10px;">
+        <div>
+          <h2>Restore from a spreadsheet</h2>
+          <p>Re-upload a spreadsheet exported from here to bring back that setup</p>
+        </div>
+      </div>
+      <div class="import-row">
+        <input type="file" id="importFileInput" accept=".xlsx" />
+        <button class="btn" id="importBtn">Restore</button>
+      </div>
+      <div class="hint">Edit the Zones, Technicians, Holidays, or Swaps sheets in Excel/Sheets, keep it as .xlsx, then upload it here — this replaces everything currently set up on this page.</div>
+      <div id="importMsg"></div>
+    </div>
+
+  </main>
+</div>
+
+<footer class="foot">DUTY ROSTER — runs entirely in your browser. Nothing is uploaded anywhere.</footer>
+
+<!-- ============ SWAP MODAL ============ -->
+<div class="modal-overlay" id="swapModalOverlay" hidden>
+  <div class="modal">
+    <button class="btn-icon modal-close" id="modalCloseBtn" title="Close">&times;</button>
+    <h3 id="modalTitle">Edit assignment</h3>
+    <div class="modal-sub" id="modalSub">—</div>
+
+    <div class="current-box">
+      <div>
+        <div class="cb-label">Currently assigned</div>
+        <div class="cb-name" id="modalCurrentName">—</div>
+      </div>
+      <span class="badge" id="modalCurrentBadge"></span>
+    </div>
+
+    <div class="field" style="margin-top:14px;">
+      <label>Suggestion scope</label>
+      <div class="radio-row" style="flex-direction:row;">
+        <label class="radio-opt" style="flex:1;" id="scopeZoneWrap">
+          <input type="radio" name="swapScope" value="zone" checked />
+          <span><span class="rt">Same zone</span></span>
+        </label>
+        <label class="radio-opt" style="flex:1;" id="scopeAllWrap">
+          <input type="radio" name="swapScope" value="all" />
+          <span><span class="rt">Any zone</span></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="suggestion-wrap" id="suggestionWrap" style="display:none;">
+      <div class="sw-label" id="suggestionLabel">Suggested cover</div>
+      <div id="suggestionRows"></div>
+    </div>
+
+    <div class="field" style="margin-top:14px;">
+      <label for="swapTechSelect">Assign this week to</label>
+      <select id="swapTechSelect"></select>
+    </div>
+
+    <div class="field">
+      <label>How should this swap apply?</label>
+      <div class="radio-row">
+        <label class="radio-opt" id="modeSingleWrap">
+          <input type="radio" name="swapMode" value="single" checked />
+          <span>
+            <span class="rt">This week only</span>
+            <span class="rd">One-off cover. The rotation resumes normally the following week.</span>
+          </span>
+        </label>
+        <label class="radio-opt" id="modeOnwardWrap">
+          <input type="radio" name="swapMode" value="onward" />
+          <span>
+            <span class="rt">This week onward</span>
+            <span class="rd">Permanently shifts the rotation — this person joins the cycle starting this week.</span>
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <div id="modalMsg"></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="resetWeekBtn">Reset to natural</button>
+      <button class="btn btn-primary" id="applySwapBtn">Apply</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+(function(){
+
+  /* ================= Scheduling engine ================= */
+  const ZONE_COLORS = ['#F5A524', '#4FD1C5', '#B98CE0', '#F2789E', '#8FD16B', '#6FB3F2', '#F2A65A', '#7EA6F2'];
+
+  let colorCounter = 0;
+  function nextColor(){ const c = ZONE_COLORS[colorCounter % ZONE_COLORS.length]; colorCounter += 1; return c; }
+
+  const state = {
+    zones: [],
+    technicians: [],
+    anchors: [],
+    overrides: [],
+    scheduleStart: '',
+    weeksToGenerate: 52,
+    holidays: []
+  };
+
+  let uidCounter = 0;
+  function nextId(prefix){ uidCounter += 1; return prefix + '_' + Date.now().toString(36) + '_' + uidCounter; }
+
+  function parseISODate(str){
+    const [y,m,d] = str.split('-').map(Number);
+    return new Date(Date.UTC(y, m-1, d));
+  }
+  function toICSDate(d){ return d.toISOString().slice(0,10).replace(/-/g,''); }
+  function toISODate(d){ return d.toISOString().slice(0,10); }
+  function addDays(d,n){ const r = new Date(d.getTime()); r.setUTCDate(r.getUTCDate()+n); return r; }
+  function getMondayOfWeek(d){
+    const day = d.getUTCDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    return addDays(d, diff);
+  }
+  function todayUTCDateOnly(){
+    const now = new Date();
+    return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  }
+  function formatHuman(d){ return d.toLocaleDateString('en-US', { month:'short', day:'numeric', timeZone:'UTC' }); }
+  function formatHumanLong(d){ return d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric', timeZone:'UTC' }); }
+
+  function techById(id){ return state.technicians.find(t => t.id === id) || null; }
+  function zoneById(id){ return state.zones.find(z => z.id === id) || null; }
+  function zoneIndex(id){ return state.zones.findIndex(z => z.id === id); }
+  function zoneColor(zoneId){ const z = zoneById(zoneId); return z ? z.color : ZONE_COLORS[0]; }
+  function rosterTechs(zone){ return zone.roster.map(id => techById(id)).filter(Boolean); }
+  function rotationLengthLabel(zone){
+    const n = rosterTechs(zone).length;
+    if(n === 0) return 'No technicians';
+    if(n === 1) return 'No rotation · 1 tech';
+    return n + '-week rotation';
+  }
+
+  // zone.roster = manually-managed base membership/order (Technicians panel).
+  // Each "onward" anchor carries its OWN frozen roster snapshot from creation
+  // time, so growing a rotation via a swap never retroactively changes
+  // already-elapsed or pre-anchor weeks.
+  function effectiveOrderForWeek(zone, week){
+    const applicable = state.anchors.filter(a => a.zoneId === zone.id && a.weekIndex <= week);
+    if(applicable.length === 0){
+      return { order: zone.roster.filter(id => techById(id)), anchorWeek: 0, anchorTechId: zone.roster[0] };
+    }
+    let best = applicable[0];
+    applicable.forEach(a => { if(a.weekIndex >= best.weekIndex) best = a; });
+    const order = (best.rosterSnapshot || []).filter(id => techById(id));
+    return { order, anchorWeek: best.weekIndex, anchorTechId: best.techId };
+  }
+
+  function computeSchedule(weeks){
+    const startInput = state.scheduleStart ? parseISODate(state.scheduleStart) : todayUTCDateOnly();
+    const effectiveStart = getMondayOfWeek(startInput);
+    const byZone = {};
+    state.zones.forEach(zone => {
+      const rows = [];
+      for(let w=0; w<weeks; w++){
+        const weekStart = addDays(effectiveStart, w*7);
+        const weekEnd = addDays(weekStart, 7);
+        let tech = null, isOverride = false;
+
+        const { order, anchorWeek, anchorTechId } = effectiveOrderForWeek(zone, w);
+        if(order.length > 0){
+          let idx0 = order.findIndex(id => id === anchorTechId);
+          if(idx0 === -1) idx0 = 0;
+          const pos = ((idx0 + (w - anchorWeek)) % order.length + order.length) % order.length;
+          tech = techById(order[pos]);
+        }
+
+        const ov = state.overrides.find(o => o.zoneId === zone.id && o.weekIndex === w);
+        if(ov){
+          const ovTech = techById(ov.techId);
+          if(ovTech){ tech = ovTech; isOverride = true; }
+        }
+
+        const holidayLabels = state.holidays
+          .filter(h => {
+            const hd = parseISODate(h.date);
+            return hd.getTime() >= weekStart.getTime() && hd.getTime() < weekEnd.getTime();
+          })
+          .map(h => h.label);
+
+        rows.push({ weekIndex:w, start:weekStart, end:weekEnd, tech, isOverride, holidayLabels });
+      }
+      byZone[zone.id] = rows;
+    });
+    return { effectiveStart, byZone };
+  }
+
+  function applySingleOverride(zoneId, weekIndex, techId){
+    state.overrides = state.overrides.filter(o => !(o.zoneId === zoneId && o.weekIndex === weekIndex));
+    state.overrides.push({ id: nextId('ov'), zoneId, weekIndex, techId });
+  }
+  function applyOnwardSwap(zoneId, weekIndex, techId){
+    const zone = zoneById(zoneId);
+    if(!zone) return;
+    const { order } = effectiveOrderForWeek(zone, weekIndex);
+    const newOrder = order.filter(id => id !== techId);
+    newOrder.unshift(techId);
+    state.anchors = state.anchors.filter(a => !(a.zoneId === zoneId && a.weekIndex === weekIndex));
+    state.anchors.push({ id: nextId('anchor'), zoneId, weekIndex, techId, rosterSnapshot: newOrder });
+    state.overrides = state.overrides.filter(o => !(o.zoneId === zoneId && o.weekIndex === weekIndex));
+  }
+  function resetWeek(zoneId, weekIndex){
+    state.overrides = state.overrides.filter(o => !(o.zoneId === zoneId && o.weekIndex === weekIndex));
+    state.anchors = state.anchors.filter(a => !(a.zoneId === zoneId && a.weekIndex === weekIndex));
+  }
+  function hasAdjustment(zoneId, weekIndex){
+    return state.overrides.some(o => o.zoneId===zoneId && o.weekIndex===weekIndex) ||
+           state.anchors.some(a => a.zoneId===zoneId && a.weekIndex===weekIndex);
+  }
+
+  /* How many weeks off / until their next turn would this candidate have IF
+     selected right now — modeled after how established on-call tools (e.g.
+     the SierraSoftworks/on-call scheduler, and equitable shift-rotation
+     systems used in contact centers) score a hypothetical assignment: how
+     recently were they last on call, and how close would this pick land
+     them to their own next natural turn (to avoid back-to-back coverage).
+     We rank by the WORSE of those two gaps, so a lopsided pick (e.g. off 5
+     weeks but due again in 1) loses to a balanced one (off 3, due in 3).
+     How many options to offer is fixed by the zone's roster size: an
+     odd-sized roster always has one truly best-centered technician, while
+     an even-sized roster splits evenly between two — so we show 2. */
+  function suggestTechnicians(zoneId, weekIndex, scope){
+    const lookahead = Math.max(state.weeksToGenerate, weekIndex + 1);
+    const { byZone } = computeSchedule(lookahead);
+    const rows = byZone[zoneId] || [];
+    const currentAssigned = rows[weekIndex] ? rows[weekIndex].tech : null;
+    const zone = zoneById(zoneId);
+
+    let candidates;
+    if(scope === 'all'){
+      candidates = state.technicians.slice();
+    } else {
+      const ids = new Set(zone.roster);
+      state.anchors.filter(a => a.zoneId === zone.id).forEach(a => (a.rosterSnapshot||[]).forEach(id => ids.add(id)));
+      candidates = [...ids].map(techById).filter(Boolean);
+    }
+    candidates = candidates.filter(t => !currentAssigned || t.id !== currentAssigned.id);
+    if(candidates.length === 0) return [];
+
+    // Each candidate must be judged against the rotation they're actually
+    // part of. If they already belong to the target zone (its base roster,
+    // or a prior anchor snapshot) that's the target zone's own rows. If
+    // they're being borrowed in from elsewhere ("any zone" scope), it's
+    // their own home zone's rows instead — otherwise a borrowed technician
+    // never appears in the target zone's schedule at all and would always
+    // look infinitely off rotation, which tells us nothing real about them.
+    function relevantRowsFor(techId){
+      if(zone.roster.includes(techId)) return rows;
+      const inTargetAnchor = state.anchors.some(a => a.zoneId === zoneId && (a.rosterSnapshot||[]).includes(techId));
+      if(inTargetAnchor) return rows;
+      const homeZone = state.zones.find(z => z.roster.includes(techId));
+      return homeZone ? (byZone[homeZone.id] || rows) : rows;
+    }
+
+    const BIG = 100000;
+    const scored = candidates.map(t => {
+      const candRows = relevantRowsFor(t.id);
+      let lastOnCall = -1;
+      for(let w = weekIndex-1; w>=0; w--){ if(candRows[w] && candRows[w].tech && candRows[w].tech.id===t.id){ lastOnCall=w; break; } }
+      let nextOnCall = -1;
+      for(let w = weekIndex+1; w<candRows.length; w++){ if(candRows[w] && candRows[w].tech && candRows[w].tech.id===t.id){ nextOnCall=w; break; } }
+      const timeOff = lastOnCall === -1 ? Infinity : (weekIndex - lastOnCall);
+      const buffer = nextOnCall === -1 ? Infinity : (nextOnCall - weekIndex);
+      const timeOffC = timeOff === Infinity ? BIG : timeOff;
+      const bufferC = buffer === Infinity ? BIG : buffer;
+      const balance = Math.min(timeOffC, bufferC);
+      const skew = Math.abs(timeOffC - bufferC);
+      return { tech: t, timeOff, buffer, balance, skew };
+    });
+
+    scored.sort((a,b) => {
+      if(b.balance !== a.balance) return b.balance - a.balance;
+      if(a.skew !== b.skew) return a.skew - b.skew;
+      return 0;
+    });
+
+    const rosterSize = rosterTechs(zone).length;
+    const desiredCount = (rosterSize % 2 === 0) ? 2 : 1;
+    return scored.slice(0, Math.min(desiredCount, scored.length));
+  }
+
+  /* ---------- ICS generation ---------- */
+  function escapeICSText(str){
+    return String(str).replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
+  }
+  function foldICSLine(line){
+    if(line.length <= 75) return line;
+    let out='', rest=line, first=true;
+    while(rest.length>0){
+      const chunkLen = first?75:74;
+      out += (first?'':'\r\n ') + rest.slice(0,chunkLen);
+      rest = rest.slice(chunkLen);
+      first=false;
+    }
+    return out;
+  }
+  function dtStampNow(){ return new Date().toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z'; }
+  function buildICS(weeks){
+    const { byZone } = computeSchedule(weeks);
+    const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Duty Roster On-Call Generator//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+    state.zones.forEach(zone => {
+      (byZone[zone.id] || []).forEach(row => {
+        if(!row.tech) return;
+        const summary = 'On-Call: ' + row.tech.name + ':' + zone.name;
+        let description = 'Zone: ' + zone.name + '\nTechnician: ' + row.tech.name;
+        if(row.holidayLabels.length > 0) description += '\nObserved Holiday: ' + row.holidayLabels.join(', ');
+        if(row.isOverride) description += '\nNote: Covering an adjusted shift';
+        lines.push('BEGIN:VEVENT');
+        lines.push(foldICSLine('UID:' + nextId('oncall') + '@duty-roster-generator'));
+        lines.push('DTSTAMP:' + dtStampNow());
+        lines.push('DTSTART;VALUE=DATE:' + toICSDate(row.start));
+        lines.push('DTEND;VALUE=DATE:' + toICSDate(row.end));
+        lines.push(foldICSLine('SUMMARY:' + escapeICSText(summary)));
+        lines.push(foldICSLine('DESCRIPTION:' + escapeICSText(description)));
+        lines.push('TRANSP:TRANSPARENT');
+        lines.push(row.holidayLabels.length > 0 ? 'CATEGORIES:ON-CALL,HOLIDAY' : 'CATEGORIES:ON-CALL');
+        lines.push('END:VEVENT');
+      });
+    });
+    lines.push('END:VCALENDAR');
+    return lines.join('\r\n');
+  }
+
+  /* ================= DOM refs ================= */
+  const $ = id => document.getElementById(id);
+  const zoneNameInput = $('zoneNameInput');
+  const addZoneBtn = $('addZoneBtn');
+  const zoneList = $('zoneList');
+  const zoneCount = $('zoneCount');
+
+  const techNameInput = $('techNameInput');
+  const techZoneSelect = $('techZoneSelect');
+  const addTechBtn = $('addTechBtn');
+  const techGroups = $('techGroups');
+  const techCount = $('techCount');
+
+  const startDateInput = $('startDateInput');
+  const effectiveStartHint = $('effectiveStartHint');
+  const weeksInput = $('weeksInput');
+  const weeksEndHint = $('weeksEndHint');
+
+  const holidayDateInput = $('holidayDateInput');
+  const holidayLabelInput = $('holidayLabelInput');
+  const addHolidayBtn = $('addHolidayBtn');
+  const holidayList = $('holidayList');
+  const holidayCount = $('holidayCount');
+
+  const nowStrip = $('nowStrip');
+  const boardBody = $('boardBody');
+  const jumpToTodayBtn = $('jumpToTodayBtn');
+  const holidayCoveragePanel = $('holidayCoveragePanel');
+  const coverageTable = $('coverageTable');
+
+  const downloadBtn = $('downloadBtn');
+  const downloadXlsxBtn = $('downloadXlsxBtn');
+  const downloadMsg = $('downloadMsg');
+  const importFileInput = $('importFileInput');
+  const importBtn = $('importBtn');
+  const importMsg = $('importMsg');
+  const clockDisplay = $('clockDisplay');
+
+  const swapModalOverlay = $('swapModalOverlay');
+  const modalCloseBtn = $('modalCloseBtn');
+  const modalTitle = $('modalTitle');
+  const modalSub = $('modalSub');
+  const modalCurrentName = $('modalCurrentName');
+  const modalCurrentBadge = $('modalCurrentBadge');
+  const swapTechSelect = $('swapTechSelect');
+  const suggestionWrap = $('suggestionWrap');
+  const suggestionLabel = $('suggestionLabel');
+  const suggestionRows = $('suggestionRows');
+  const modalMsg = $('modalMsg');
+  const resetWeekBtn = $('resetWeekBtn');
+  const applySwapBtn = $('applySwapBtn');
+
+  /* ---------- Init defaults ---------- */
+  (function initDefaults(){
+    const monday = getMondayOfWeek(todayUTCDateOnly());
+    startDateInput.value = toISODate(monday);
+    state.scheduleStart = startDateInput.value;
+    holidayDateInput.value = toISODate(todayUTCDateOnly());
+  })();
+
+  function tickClock(){
+    const now = new Date();
+    clockDisplay.innerHTML = now.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' }) +
+      ' <strong>' + now.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' }) + '</strong>';
+  }
+  tickClock();
+  setInterval(tickClock, 30000);
+
+  function escapeHtml(s){
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  /* ---------- Zone rendering ---------- */
+  function renderZoneSelect(){
+    const prev = techZoneSelect.value;
+    techZoneSelect.innerHTML = '';
+    state.zones.forEach(z => {
+      const opt = document.createElement('option');
+      opt.value = z.id; opt.textContent = z.name;
+      techZoneSelect.appendChild(opt);
+    });
+    if(state.zones.some(z => z.id === prev)) techZoneSelect.value = prev;
+  }
+
+  function renderZoneList(){
+    zoneCount.textContent = state.zones.length;
+    zoneList.innerHTML = '';
+    if(state.zones.length === 0){
+      zoneList.innerHTML = '<div class="empty-note">No zones yet. Add one above.</div>';
+      return;
+    }
+    state.zones.forEach((zone, idx) => {
+      const row = document.createElement('div');
+      row.className = 'zone-chip';
+      const n = rosterTechs(zone).length;
+      row.innerHTML =
+        '<input type="color" class="zone-color-input" data-zone-color="' + zone.id + '" value="' + zoneColor(zone.id) + '" title="Change zone color" />' +
+        '<span class="zname" tabindex="0" data-zone-id="' + zone.id + '" title="Click to rename"></span>' +
+        '<span class="zcount">' + n + ' tech' + (n===1?'':'s') + '</span>' +
+        '<span class="zactions">' +
+          '<button class="btn-icon" data-move-zone-up="' + zone.id + '" title="Move earlier" ' + (idx===0?'disabled':'') + '>&uarr;</button>' +
+          '<button class="btn-icon" data-move-zone-down="' + zone.id + '" title="Move later" ' + (idx===state.zones.length-1?'disabled':'') + '>&darr;</button>' +
+          '<button class="btn-icon btn-danger" title="Remove zone" data-remove-zone="' + zone.id + '">&times;</button>' +
+        '</span>';
+      row.querySelector('.zname').textContent = zone.name;
+      zoneList.appendChild(row);
+    });
+  }
+
+  function beginRenameZone(nameEl){
+    const zoneId = nameEl.getAttribute('data-zone-id');
+    const zone = zoneById(zoneId);
+    if(!zone) return;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'zname-input';
+    input.value = zone.name;
+    input.maxLength = 40;
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    function commit(){
+      const val = input.value.trim();
+      if(val && !state.zones.some(z => z.id !== zoneId && z.name.toLowerCase() === val.toLowerCase())){
+        zone.name = val;
+      } else if(val){
+        alert('A zone named "' + val + '" already exists.');
+      }
+      renderAll();
+    }
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', e => {
+      if(e.key === 'Enter'){ e.preventDefault(); input.blur(); }
+      if(e.key === 'Escape'){ e.preventDefault(); renderAll(); }
+    });
+  }
+  function moveZone(zoneId, dir){
+    const idx = state.zones.findIndex(z => z.id === zoneId);
+    const swapIdx = idx + dir;
+    if(idx === -1 || swapIdx < 0 || swapIdx >= state.zones.length) return;
+    [state.zones[idx], state.zones[swapIdx]] = [state.zones[swapIdx], state.zones[idx]];
+    renderAll();
+  }
+
+  /* ---------- Technician rendering (editable names) ---------- */
+  function renderTechnicians(){
+    techCount.textContent = state.technicians.length;
+    techGroups.innerHTML = '';
+    if(state.zones.length === 0){
+      techGroups.innerHTML = '<div class="empty-note">Add a zone first.</div>';
+      return;
+    }
+    state.zones.forEach(zone => {
+      const list = rosterTechs(zone);
+      const group = document.createElement('div');
+      group.className = 'tech-group';
+      group.innerHTML = '<div class="tech-group-head"><span class="zone-dot" style="width:7px;height:7px;background:' + zoneColor(zone.id) + '"></span><span></span></div>';
+      group.querySelector('.tech-group-head span:last-child').textContent = zone.name + ' — ' + rotationLengthLabel(zone);
+
+      if(list.length === 0){
+        const empty = document.createElement('div');
+        empty.className = 'empty-note';
+        empty.textContent = 'No technicians assigned.';
+        group.appendChild(empty);
+      } else {
+        list.forEach((tech, idx) => {
+          const item = document.createElement('div');
+          item.className = 'tech-item';
+          item.innerHTML =
+            '<span class="order-badge">' + (idx+1) + '</span>' +
+            '<span class="tname" tabindex="0" data-tech-id="' + tech.id + '" title="Click to rename"></span>' +
+            '<span class="tactions">' +
+              '<button class="btn-icon" data-move-up="' + tech.id + '" data-zone="' + zone.id + '" title="Move earlier" ' + (idx===0?'disabled':'') + '>&uarr;</button>' +
+              '<button class="btn-icon" data-move-down="' + tech.id + '" data-zone="' + zone.id + '" title="Move later" ' + (idx===list.length-1?'disabled':'') + '>&darr;</button>' +
+              '<button class="btn-icon btn-danger" data-remove-tech="' + tech.id + '" data-zone="' + zone.id + '" title="Remove from zone">&times;</button>' +
+            '</span>';
+          item.querySelector('.tname').textContent = tech.name;
+          group.appendChild(item);
+        });
+      }
+      techGroups.appendChild(group);
+    });
+  }
+
+  function beginRenameTech(nameEl){
+    const techId = nameEl.getAttribute('data-tech-id');
+    const tech = techById(techId);
+    if(!tech) return;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'tname-input';
+    input.value = tech.name;
+    input.maxLength = 60;
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    function commit(){
+      const val = input.value.trim();
+      if(val) tech.name = val;
+      renderAll();
+    }
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', e => {
+      if(e.key === 'Enter'){ e.preventDefault(); input.blur(); }
+      if(e.key === 'Escape'){ e.preventDefault(); renderAll(); }
+    });
+  }
+
+  /* ---------- Holiday rendering ---------- */
+  let editingHolidayId = null;
+  function renderHolidays(){
+    holidayCount.textContent = state.holidays.length;
+    holidayList.innerHTML = '';
+    const sorted = [...state.holidays].sort((a,b) => a.date.localeCompare(b.date));
+    sorted.forEach(h => {
+      const row = document.createElement('div');
+      row.className = 'holiday-item';
+      if(h.id === editingHolidayId){
+        row.classList.add('editing');
+        row.innerHTML =
+          '<input type="date" class="hdate-input" value="' + h.date + '" />' +
+          '<input type="text" class="hlabel-input" maxlength="60" />' +
+          '<button class="btn-icon" data-save-holiday="' + h.id + '" title="Save">&check;</button>' +
+          '<button class="btn-icon" data-cancel-holiday="' + h.id + '" title="Cancel">&times;</button>';
+        row.querySelector('.hlabel-input').value = h.label;
+      } else {
+        row.innerHTML =
+          '<span class="hdate" tabindex="0" data-edit-holiday="' + h.id + '" title="Click to edit"></span>' +
+          '<span class="hlabel" tabindex="0" data-edit-holiday="' + h.id + '" title="Click to edit"></span>' +
+          '<button class="btn-icon btn-danger" data-remove-holiday="' + h.id + '" title="Remove">&times;</button>';
+        row.querySelector('.hdate').textContent = formatHuman(parseISODate(h.date));
+        row.querySelector('.hlabel').textContent = h.label;
+      }
+      holidayList.appendChild(row);
+    });
+  }
+
+  /* ---------- Now strip ---------- */
+  function renderNowStrip(){
+    nowStrip.innerHTML = '';
+    if(state.zones.length === 0) return;
+    const weeks = Math.max(1, state.weeksToGenerate);
+    const { byZone } = computeSchedule(weeks);
+    const today = todayUTCDateOnly();
+
+    state.zones.forEach(zone => {
+      const rows = byZone[zone.id] || [];
+      const current = rows.find(r => today.getTime() >= r.start.getTime() && today.getTime() < r.end.getTime());
+      const card = document.createElement('div');
+      card.className = 'now-card';
+      card.style.setProperty('--zc', zoneColor(zone.id));
+      const holidayNote = current && current.holidayLabels.length ? '<div class="wk-holiday" style="margin-top:6px;">&#9733; ' + escapeHtml(current.holidayLabels.join(', ')) + '</div>' : '';
+      card.innerHTML =
+        '<div class="eyebrow"><span class="live-dot"></span> ON CALL NOW</div>' +
+        '<div class="who"></div>' +
+        '<div class="zone-name"></div>' + holidayNote;
+      card.querySelector('.who').textContent = (current && current.tech) ? current.tech.name : (rosterTechs(zone).length ? '—' : 'Unstaffed');
+      card.querySelector('.zone-name').textContent = zone.name;
+      nowStrip.appendChild(card);
+    });
+  }
+
+  /* ---------- Duty board ---------- */
+  function renderBoard(){
+    boardBody.innerHTML = '';
+    if(state.zones.length === 0){
+      boardBody.innerHTML = '<div class="empty-note">Add zones and technicians to see the duty board.</div>';
+      return;
+    }
+    const weeks = Math.max(1, state.weeksToGenerate);
+    const { byZone } = computeSchedule(weeks);
+    const today = todayUTCDateOnly();
+
+    state.zones.forEach(zone => {
+      const rows = byZone[zone.id] || [];
+      const board = document.createElement('div');
+      board.className = 'zone-board';
+      const head = document.createElement('div');
+      head.className = 'zone-board-head';
+      head.innerHTML =
+        '<span class="zone-dot" style="background:' + zoneColor(zone.id) + '"></span>' +
+        '<span class="zname"></span>' +
+        '<span class="badge"></span>';
+      head.querySelector('.zname').textContent = zone.name;
+      head.querySelector('.badge').textContent = rotationLengthLabel(zone);
+      board.appendChild(head);
+
+      if(rows.length === 0){
+        const empty = document.createElement('div');
+        empty.className = 'empty-note';
+        empty.textContent = 'No technicians assigned to this zone yet.';
+        board.appendChild(empty);
+      } else {
+        const tape = document.createElement('div');
+        tape.className = 'tape';
+        rows.forEach(row => {
+          const isToday = today.getTime() >= row.start.getTime() && today.getTime() < row.end.getTime();
+          const chip = document.createElement('div');
+          chip.className = 'week-chip' + (isToday ? ' is-today' : '') + (row.isOverride ? ' is-override' : '');
+          chip.innerHTML =
+            '<div class="wk-top">' +
+              '<div><div class="wk-num">WK ' + (row.weekIndex+1) + '</div><div class="wk-date"></div></div>' +
+              (isToday ? '<span class="wk-air" title="On call now"></span>' : '<button class="wk-swap-btn" title="Edit this week" data-swap-zone="' + zone.id + '" data-swap-week="' + row.weekIndex + '">&#8646;</button>') +
+            '</div>' +
+            '<div class="wk-tech"></div>' +
+            (row.holidayLabels.length ? '<div class="wk-holiday">&#9733; <span></span></div>' : '') +
+            (row.isOverride ? '<span class="wk-tag">Adjusted</span>' : '');
+          if(isToday){
+            // still allow editing today's week via a swap button beside the live dot
+            const topRight = chip.querySelector('.wk-top');
+            const btn = document.createElement('button');
+            btn.className = 'wk-swap-btn';
+            btn.title = 'Edit this week';
+            btn.setAttribute('data-swap-zone', zone.id);
+            btn.setAttribute('data-swap-week', row.weekIndex);
+            btn.innerHTML = '&#8646;';
+            btn.style.marginTop = '2px';
+            topRight.appendChild(btn);
+          }
+          chip.querySelector('.wk-date').textContent = formatHuman(row.start);
+          chip.querySelector('.wk-tech').textContent = row.tech ? row.tech.name : '—';
+          if(row.holidayLabels.length) chip.querySelector('.wk-holiday span').textContent = row.holidayLabels.join(', ');
+          tape.appendChild(chip);
+        });
+        board.appendChild(tape);
+      }
+
+      // Active adjustments summary for this zone
+      const zoneOverrides = state.overrides.filter(o => o.zoneId === zone.id);
+      const zoneAnchors = state.anchors.filter(a => a.zoneId === zone.id);
+      if(zoneOverrides.length || zoneAnchors.length){
+        const list = document.createElement('div');
+        list.className = 'adjust-list';
+        zoneOverrides.forEach(o => {
+          const t = techById(o.techId);
+          const chip = document.createElement('span');
+          chip.className = 'adjust-chip';
+          chip.innerHTML = '<span>Wk ' + (o.weekIndex+1) + ': ' + escapeHtml(t?t.name:'—') + ' (one week)</span><button class="btn-icon" data-reset-zone="' + zone.id + '" data-reset-week="' + o.weekIndex + '" title="Remove">&times;</button>';
+          list.appendChild(chip);
+        });
+        zoneAnchors.forEach(a => {
+          const t = techById(a.techId);
+          const chip = document.createElement('span');
+          chip.className = 'adjust-chip';
+          chip.innerHTML = '<span>Wk ' + (a.weekIndex+1) + ': ' + escapeHtml(t?t.name:'—') + ' (onward)</span><button class="btn-icon" data-reset-zone="' + zone.id + '" data-reset-week="' + a.weekIndex + '" title="Remove">&times;</button>';
+          list.appendChild(chip);
+        });
+        board.appendChild(list);
+      }
+
+      boardBody.appendChild(board);
+    });
+  }
+
+  /* ---------- Holiday coverage ---------- */
+  function renderCoverage(){
+    if(state.holidays.length === 0 || state.zones.length === 0){
+      holidayCoveragePanel.style.display = 'none';
+      return;
+    }
+    holidayCoveragePanel.style.display = '';
+    const weeks = Math.max(1, state.weeksToGenerate);
+    const { byZone, effectiveStart } = computeSchedule(weeks);
+    const sorted = [...state.holidays].sort((a,b) => a.date.localeCompare(b.date));
+
+    let html = '<thead><tr><th>Holiday</th><th>Date</th><th>Zone</th><th>Technician on call</th></tr></thead><tbody>';
+    sorted.forEach(h => {
+      const hd = parseISODate(h.date);
+      state.zones.forEach((zone, zi) => {
+        const rows = byZone[zone.id] || [];
+        const match = rows.find(r => hd.getTime() >= r.start.getTime() && hd.getTime() < r.end.getTime());
+        let cell;
+        if(rosterTechs(zone).length === 0){
+          cell = '<span class="oob">No technicians assigned</span>';
+        } else if(match && match.tech){
+          cell = escapeHtml(match.tech.name) + (match.isOverride ? ' <span class="badge">adjusted</span>' : '');
+        } else if(hd.getTime() < effectiveStart.getTime()){
+          cell = '<span class="oob">Before schedule start</span>';
+        } else {
+          cell = '<span class="oob">Beyond generated range — increase weeks</span>';
+        }
+        html += '<tr>' +
+          (zi === 0 ? '<td rowspan="' + state.zones.length + '">' + escapeHtml(h.label) + '</td><td rowspan="' + state.zones.length + '">' + formatHuman(hd) + '</td>' : '') +
+          '<td>' + escapeHtml(zone.name) + '</td><td>' + cell + '</td>' +
+        '</tr>';
+      });
+    });
+    html += '</tbody>';
+    coverageTable.innerHTML = html;
+  }
+
+  /* ---------- Master render ---------- */
+  function renderAll(){
+    renderZoneSelect();
+    renderZoneList();
+    renderTechnicians();
+    renderHolidays();
+    renderNowStrip();
+    renderBoard();
+    renderCoverage();
+  }
+
+  /* ================= Event wiring ================= */
+  addZoneBtn.addEventListener('click', () => {
+    const name = zoneNameInput.value.trim();
+    if(!name){ zoneNameInput.focus(); return; }
+    if(state.zones.some(z => z.name.toLowerCase() === name.toLowerCase())){
+      alert('A zone named "' + name + '" already exists.');
+      return;
+    }
+    state.zones.push({ id: nextId('zone'), name, roster: [], color: nextColor() });
+    zoneNameInput.value = '';
+    renderAll();
+  });
+  zoneNameInput.addEventListener('keydown', e => { if(e.key === 'Enter') addZoneBtn.click(); });
+
+  zoneList.addEventListener('click', e => {
+    const nameEl = e.target.closest('.zname');
+    if(nameEl){ beginRenameZone(nameEl); return; }
+    const upBtn = e.target.closest('[data-move-zone-up]');
+    const downBtn = e.target.closest('[data-move-zone-down]');
+    if(upBtn) return moveZone(upBtn.getAttribute('data-move-zone-up'), -1);
+    if(downBtn) return moveZone(downBtn.getAttribute('data-move-zone-down'), 1);
+    const btn = e.target.closest('[data-remove-zone]');
+    if(!btn) return;
+    const zoneId = btn.getAttribute('data-remove-zone');
+    const zone = zoneById(zoneId);
+    const n = rosterTechs(zone).length;
+    const msg = n > 0
+      ? 'Remove "' + zone.name + '"? This also removes ' + n + ' assigned technician' + (n===1?'':'s') + ' from this zone.'
+      : 'Remove "' + zone.name + '"?';
+    if(!confirm(msg)) return;
+    state.zones = state.zones.filter(z => z.id !== zoneId);
+    state.anchors = state.anchors.filter(a => a.zoneId !== zoneId);
+    state.overrides = state.overrides.filter(o => o.zoneId !== zoneId);
+    pruneOrphanTechnicians();
+    renderAll();
+  });
+  zoneList.addEventListener('change', e => {
+    const colorInput = e.target.closest('[data-zone-color]');
+    if(!colorInput) return;
+    const zone = zoneById(colorInput.getAttribute('data-zone-color'));
+    if(!zone) return;
+    zone.color = colorInput.value;
+    renderAll();
+  });
+
+  addTechBtn.addEventListener('click', () => {
+    const name = techNameInput.value.trim();
+    const zoneId = techZoneSelect.value;
+    if(!name){ techNameInput.focus(); return; }
+    if(!zoneId){ alert('Add a zone first.'); return; }
+    const id = nextId('tech');
+    state.technicians.push({ id, name });
+    zoneById(zoneId).roster.push(id);
+    techNameInput.value = '';
+    techNameInput.focus();
+    renderAll();
+  });
+  techNameInput.addEventListener('keydown', e => { if(e.key === 'Enter') addTechBtn.click(); });
+
+  techGroups.addEventListener('click', e => {
+    const nameEl = e.target.closest('.tname');
+    if(nameEl){ beginRenameTech(nameEl); return; }
+    const upBtn = e.target.closest('[data-move-up]');
+    const downBtn = e.target.closest('[data-move-down]');
+    const rmBtn = e.target.closest('[data-remove-tech]');
+    if(upBtn) return moveTechInZone(upBtn.getAttribute('data-zone'), upBtn.getAttribute('data-move-up'), -1);
+    if(downBtn) return moveTechInZone(downBtn.getAttribute('data-zone'), downBtn.getAttribute('data-move-down'), 1);
+    if(rmBtn){
+      const zoneId = rmBtn.getAttribute('data-zone');
+      const techId = rmBtn.getAttribute('data-remove-tech');
+      const zone = zoneById(zoneId);
+      if(zone) zone.roster = zone.roster.filter(id => id !== techId);
+      pruneOrphanTechnicians();
+      renderAll();
+    }
+  });
+  techGroups.addEventListener('keydown', e => {
+    if(e.key === 'Enter' && e.target.classList.contains('tname')) beginRenameTech(e.target);
+  });
+  zoneList.addEventListener('keydown', e => {
+    if(e.key === 'Enter' && e.target.classList.contains('zname')) beginRenameZone(e.target);
+  });
+  function moveTechInZone(zoneId, techId, dir){
+    const zone = zoneById(zoneId);
+    if(!zone) return;
+    const idx = zone.roster.indexOf(techId);
+    const swapIdx = idx + dir;
+    if(idx === -1 || swapIdx < 0 || swapIdx >= zone.roster.length) return;
+    [zone.roster[idx], zone.roster[swapIdx]] = [zone.roster[swapIdx], zone.roster[idx]];
+    renderAll();
+  }
+  // A technician not referenced by any zone roster or any anchor snapshot is unreachable — remove it.
+  function pruneOrphanTechnicians(){
+    const referenced = new Set();
+    state.zones.forEach(z => z.roster.forEach(id => referenced.add(id)));
+    state.anchors.forEach(a => (a.rosterSnapshot||[]).forEach(id => referenced.add(id)));
+    state.overrides.forEach(o => referenced.add(o.techId));
+    state.technicians = state.technicians.filter(t => referenced.has(t.id));
+  }
+
+  addHolidayBtn.addEventListener('click', () => {
+    const date = holidayDateInput.value;
+    const label = holidayLabelInput.value.trim();
+    if(!date || !label){ (date ? holidayLabelInput : holidayDateInput).focus(); return; }
+    state.holidays.push({ id: nextId('hol'), date, label });
+    holidayLabelInput.value = '';
+    renderAll();
+  });
+  holidayLabelInput.addEventListener('keydown', e => { if(e.key === 'Enter') addHolidayBtn.click(); });
+
+  holidayList.addEventListener('click', e => {
+    const editEl = e.target.closest('[data-edit-holiday]');
+    if(editEl){ editingHolidayId = editEl.getAttribute('data-edit-holiday'); renderHolidays(); return; }
+    const saveBtn = e.target.closest('[data-save-holiday]');
+    if(saveBtn){
+      const id = saveBtn.getAttribute('data-save-holiday');
+      const row = saveBtn.closest('.holiday-item');
+      const date = row.querySelector('.hdate-input').value;
+      const label = row.querySelector('.hlabel-input').value.trim();
+      if(!date || !label){ return; }
+      const h = state.holidays.find(x => x.id === id);
+      if(h){ h.date = date; h.label = label; }
+      editingHolidayId = null;
+      renderAll();
+      return;
+    }
+    const cancelBtn = e.target.closest('[data-cancel-holiday]');
+    if(cancelBtn){ editingHolidayId = null; renderHolidays(); return; }
+    const btn = e.target.closest('[data-remove-holiday]');
+    if(!btn) return;
+    state.holidays = state.holidays.filter(h => h.id !== btn.getAttribute('data-remove-holiday'));
+    if(editingHolidayId === btn.getAttribute('data-remove-holiday')) editingHolidayId = null;
+    renderAll();
+  });
+  holidayList.addEventListener('keydown', e => {
+    if(e.key === 'Enter' && e.target.classList.contains('hlabel-input')){
+      const row = e.target.closest('.holiday-item');
+      row.querySelector('[data-save-holiday]').click();
+    }
+    if(e.key === 'Enter' && e.target.hasAttribute('data-edit-holiday')){
+      editingHolidayId = e.target.getAttribute('data-edit-holiday');
+      renderHolidays();
+    }
+    if(e.key === 'Escape' && (e.target.classList.contains('hdate-input') || e.target.classList.contains('hlabel-input'))){
+      editingHolidayId = null;
+      renderHolidays();
+    }
+  });
+
+  startDateInput.addEventListener('change', () => {
+    state.scheduleStart = startDateInput.value;
+    updateEffectiveStartHint();
+    updateWeeksEndHint();
+    renderAll();
+  });
+  function updateEffectiveStartHint(){
+    if(!state.scheduleStart){ effectiveStartHint.textContent = 'Effective start: —'; return; }
+    const monday = getMondayOfWeek(parseISODate(state.scheduleStart));
+    effectiveStartHint.textContent = 'Effective start: ' + formatHumanLong(monday);
+  }
+  function updateWeeksEndHint(){
+    if(!state.scheduleStart){ weeksEndHint.textContent = 'Generates through: —'; return; }
+    const monday = getMondayOfWeek(parseISODate(state.scheduleStart));
+    const lastDay = addDays(monday, state.weeksToGenerate * 7 - 1);
+    weeksEndHint.textContent = 'Generates through: ' + formatHumanLong(lastDay);
+  }
+  updateEffectiveStartHint();
+
+  weeksInput.addEventListener('change', () => {
+    let v = parseInt(weeksInput.value, 10);
+    if(isNaN(v) || v < 1) v = 1;
+    if(v > 260) v = 260;
+    weeksInput.value = v;
+    state.weeksToGenerate = v;
+    updateWeeksEndHint();
+    renderAll();
+  });
+  state.weeksToGenerate = parseInt(weeksInput.value, 10);
+  updateWeeksEndHint();
+
+  /* ---------- Export ---------- */
+  function hasAnyStaffedZone(){
+    return state.zones.some(z => rosterTechs(z).length > 0);
+  }
+  downloadBtn.addEventListener('click', () => {
+    downloadMsg.innerHTML = '';
+    if(!hasAnyStaffedZone()){
+      downloadMsg.innerHTML = '<div class="msg warn">Add at least one zone with a technician before generating a calendar.</div>';
+      return;
+    }
+    const ics = buildICS(state.weeksToGenerate);
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'on-call-schedule.ics';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    downloadMsg.innerHTML = '<div class="msg ok">Downloaded on-call-schedule.ics — ' + state.weeksToGenerate + ' week' + (state.weeksToGenerate===1?'':'s') + ' covering all staffed zones.</div>';
+  });
+
+  /* ---------- Spreadsheet export ---------- */
+  function autoFitCols(aoa){
+    const colCount = aoa.reduce((max,row) => Math.max(max, row.length), 0);
+    const widths = [];
+    for(let c=0; c<colCount; c++){
+      let maxLen = 8;
+      aoa.forEach(row => {
+        const v = row[c];
+        const len = (v===undefined || v===null) ? 0 : String(v).length;
+        if(len > maxLen) maxLen = len;
+      });
+      widths.push({ wch: Math.min(maxLen + 2, 45) });
+    }
+    return widths;
+  }
+  function addSheet(wb, aoa, name){
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = autoFitCols(aoa);
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  }
+
+  function buildWorkbook(){
+    const wb = XLSX.utils.book_new();
+
+    const settingsRows = [
+      ['Setting','Value'],
+      ['Rotation Start Date', state.scheduleStart],
+      ['Weeks To Generate', state.weeksToGenerate]
+    ];
+    addSheet(wb, settingsRows, 'Settings');
+
+    const zoneRows = [['Zone Name','Color']].concat(state.zones.map(z => [z.name, z.color]));
+    addSheet(wb, zoneRows, 'Zones');
+
+    const techRows = [['Zone Name','Order','Technician Name']];
+    state.zones.forEach(z => {
+      rosterTechs(z).forEach((t,idx) => techRows.push([z.name, idx+1, t.name]));
+    });
+    addSheet(wb, techRows, 'Technicians');
+
+    const holRows = [['Date (YYYY-MM-DD)','Holiday Name']].concat(
+      state.holidays.map(h => [h.date, h.label])
+    );
+    addSheet(wb, holRows, 'Holidays');
+
+    const swapRows = [['Zone Name','Week Number','Technician Name','Mode (single or onward)']];
+    state.overrides.forEach(o => {
+      const z = zoneById(o.zoneId), t = techById(o.techId);
+      if(z && t) swapRows.push([z.name, o.weekIndex+1, t.name, 'single']);
+    });
+    state.anchors.forEach(a => {
+      const z = zoneById(a.zoneId), t = techById(a.techId);
+      if(z && t) swapRows.push([z.name, a.weekIndex+1, t.name, 'onward']);
+    });
+    addSheet(wb, swapRows, 'Swaps');
+
+    const schedRows = [['Zone','Week #','Week Start','Week End','Technician','Holiday','Adjustment']];
+    const { byZone } = computeSchedule(state.weeksToGenerate);
+    state.zones.forEach(z => {
+      (byZone[z.id]||[]).forEach(row => {
+        schedRows.push([
+          z.name, row.weekIndex+1, toISODate(row.start), toISODate(addDays(row.end,-1)),
+          row.tech ? row.tech.name : '', row.holidayLabels.join(', '),
+          row.isOverride ? 'Adjusted' : ''
+        ]);
+      });
+    });
+    addSheet(wb, schedRows, 'Schedule');
+
+    return wb;
+  }
+
+  downloadXlsxBtn.addEventListener('click', () => {
+    downloadMsg.innerHTML = '';
+    if(!hasAnyStaffedZone()){
+      downloadMsg.innerHTML = '<div class="msg warn">Add at least one zone with a technician before generating a spreadsheet.</div>';
+      return;
+    }
+    if(typeof XLSX === 'undefined'){
+      downloadMsg.innerHTML = '<div class="msg warn">Couldn\'t load the spreadsheet library — check your connection and try again.</div>';
+      return;
+    }
+    try{
+      const wb = buildWorkbook();
+      XLSX.writeFile(wb, 'on-call-schedule.xlsx');
+      downloadMsg.innerHTML = '<div class="msg ok">Downloaded on-call-schedule.xlsx — includes a re-editable setup plus a full ' + state.weeksToGenerate + '-week schedule view.</div>';
+    }catch(err){
+      downloadMsg.innerHTML = '<div class="msg warn">Could not build the spreadsheet: ' + escapeHtml(String(err && err.message || err)) + '</div>';
+    }
+  });
+
+  /* ---------- Spreadsheet import (restore) ---------- */
+  function sheetAOA(wb, name){
+    const ws = wb.Sheets[name];
+    if(!ws) return null;
+    return XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+  }
+  function cellDateStr(v){
+    if(v instanceof Date){
+      return v.getUTCFullYear() + '-' + String(v.getUTCMonth()+1).padStart(2,'0') + '-' + String(v.getUTCDate()).padStart(2,'0');
+    }
+    return String(v||'').trim().slice(0,10);
+  }
+
+  function parseWorkbook(wb){
+    const newState = {
+      zones: [], technicians: [], anchors: [], overrides: [],
+      scheduleStart: '', weeksToGenerate: 52, holidays: []
+    };
+
+    const settingsAOA = sheetAOA(wb, 'Settings');
+    if(settingsAOA){
+      settingsAOA.slice(1).forEach(row => {
+        const key = String(row[0]||'').trim();
+        const val = row[1];
+        if(key === 'Rotation Start Date') newState.scheduleStart = cellDateStr(val);
+        if(key === 'Weeks To Generate'){
+          const n = parseInt(val, 10);
+          if(!isNaN(n) && n > 0) newState.weeksToGenerate = Math.min(260, n);
+        }
+      });
+    }
+
+    const zonesAOA = sheetAOA(wb, 'Zones');
+    const zoneIdByName = new Map();
+    let cIdx = 0;
+    const hexColorRe = /^#?[0-9a-fA-F]{6}$/;
+    if(zonesAOA){
+      zonesAOA.slice(1).forEach(row => {
+        const name = String(row[0]||'').trim();
+        if(!name || zoneIdByName.has(name)) return;
+        const id = nextId('zone');
+        const rawColor = String(row[1]||'').trim();
+        const color = hexColorRe.test(rawColor) ? (rawColor.startsWith('#') ? rawColor : '#'+rawColor) : ZONE_COLORS[cIdx % ZONE_COLORS.length];
+        newState.zones.push({ id, name, roster: [], color });
+        cIdx += 1;
+        zoneIdByName.set(name, id);
+      });
+    }
+    if(newState.zones.length === 0) return { error: 'No zones found. Make sure the "Zones" sheet has a "Zone Name" column with at least one row.' };
+
+    const techAOA = sheetAOA(wb, 'Technicians');
+    const techIdByZoneAndName = new Map();
+    if(techAOA){
+      techAOA.slice(1).forEach(row => {
+        const zoneName = String(row[0]||'').trim();
+        const techName = String(row[2]||'').trim();
+        if(!zoneName || !techName) return;
+        const zoneId = zoneIdByName.get(zoneName);
+        if(!zoneId) return;
+        const id = nextId('tech');
+        newState.technicians.push({ id, name: techName });
+        newState.zones.find(z => z.id === zoneId).roster.push(id);
+        techIdByZoneAndName.set(zoneName + '||' + techName, id);
+      });
+    }
+
+    const holAOA = sheetAOA(wb, 'Holidays');
+    if(holAOA){
+      holAOA.slice(1).forEach(row => {
+        const date = cellDateStr(row[0]);
+        const label = String(row[1]||'').trim();
+        if(!date || !label) return;
+        newState.holidays.push({ id: nextId('hol'), date, label });
+      });
+    }
+
+    const pendingOnward = [];
+    const swapAOA = sheetAOA(wb, 'Swaps');
+    if(swapAOA){
+      swapAOA.slice(1).forEach(row => {
+        const zoneName = String(row[0]||'').trim();
+        const weekNum = parseInt(row[1], 10);
+        const techName = String(row[2]||'').trim();
+        const mode = String(row[3]||'').trim().toLowerCase();
+        if(!zoneName || !techName || isNaN(weekNum)) return;
+        const zoneId = zoneIdByName.get(zoneName);
+        if(!zoneId) return;
+        let techId = techIdByZoneAndName.get(zoneName + '||' + techName);
+        if(!techId){
+          const found = newState.technicians.find(t => t.name === techName);
+          if(found) techId = found.id;
+        }
+        if(!techId) return;
+        const weekIndex = weekNum - 1;
+        if(weekIndex < 0) return;
+        if(mode === 'onward') pendingOnward.push({ zoneId, weekIndex, techId });
+        else newState.overrides.push({ id: nextId('ov'), zoneId, weekIndex, techId });
+      });
+    }
+
+    return { newState, pendingOnward };
+  }
+
+  importBtn.addEventListener('click', () => {
+    importMsg.innerHTML = '';
+    const file = importFileInput.files && importFileInput.files[0];
+    if(!file){
+      importMsg.innerHTML = '<div class="msg warn">Choose a .xlsx file first.</div>';
+      return;
+    }
+    if(typeof XLSX === 'undefined'){
+      importMsg.innerHTML = '<div class="msg warn">Couldn\'t load the spreadsheet library — check your connection and try again.</div>';
+      return;
+    }
+    if(!confirm('This replaces everything currently set up on this page (zones, technicians, holidays, swaps) with what\'s in the file. Continue?')){
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => { importMsg.innerHTML = '<div class="msg warn">Could not read that file.</div>'; };
+    reader.onload = () => {
+      try{
+        const data = new Uint8Array(reader.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        const result = parseWorkbook(wb);
+        if(result.error){
+          importMsg.innerHTML = '<div class="msg warn">' + escapeHtml(result.error) + '</div>';
+          return;
+        }
+        state.zones = result.newState.zones;
+        state.technicians = result.newState.technicians;
+        state.anchors = [];
+        state.overrides = result.newState.overrides;
+        state.scheduleStart = result.newState.scheduleStart || state.scheduleStart;
+        state.weeksToGenerate = result.newState.weeksToGenerate;
+        state.holidays = result.newState.holidays;
+
+        result.pendingOnward
+          .sort((a,b) => a.weekIndex - b.weekIndex)
+          .forEach(p => applyOnwardSwap(p.zoneId, p.weekIndex, p.techId));
+
+        if(state.scheduleStart) startDateInput.value = state.scheduleStart;
+        weeksInput.value = state.weeksToGenerate;
+        updateEffectiveStartHint();
+        updateWeeksEndHint();
+        renderAll();
+        importMsg.innerHTML = '<div class="msg ok">Restored ' + state.zones.length + ' zone' + (state.zones.length===1?'':'s') + ' and ' + state.technicians.length + ' technician' + (state.technicians.length===1?'':'s') + ' from the file.</div>';
+        importFileInput.value = '';
+      }catch(err){
+        importMsg.innerHTML = '<div class="msg warn">Could not read that spreadsheet: ' + escapeHtml(String(err && err.message || err)) + '</div>';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  /* ================= Swap modal ================= */
+  let editing = null; // { zoneId, weekIndex }
+
+  function currentScope(){
+    return document.querySelector('input[name="swapScope"]:checked').value;
+  }
+  function currentMode(){
+    return document.querySelector('input[name="swapMode"]:checked').value;
+  }
+
+  function openSwapModal(zoneId, weekIndex){
+    editing = { zoneId, weekIndex };
+    const zone = zoneById(zoneId);
+    const { byZone } = computeSchedule(Math.max(state.weeksToGenerate, weekIndex+1));
+    const row = (byZone[zoneId]||[])[weekIndex];
+    if(!row) return;
+
+    modalTitle.textContent = zone.name + ' — Week ' + (weekIndex+1);
+    modalSub.textContent = formatHumanLong(row.start) + ' – ' + formatHumanLong(addDays(row.end,-1));
+    modalCurrentName.textContent = row.tech ? row.tech.name : '— unassigned —';
+    modalCurrentBadge.textContent = row.isOverride ? 'Adjusted' : 'Natural rotation';
+
+    document.querySelector('input[name="swapScope"][value="zone"]').checked = true;
+    document.querySelector('input[name="swapMode"][value="single"]').checked = true;
+    modalMsg.innerHTML = '';
+    resetWeekBtn.style.display = hasAdjustment(zoneId, weekIndex) ? '' : 'none';
+
+    populateSwapDropdown();
+    refreshSuggestion();
+    swapModalOverlay.hidden = false;
+  }
+  function closeSwapModal(){
+    swapModalOverlay.hidden = true;
+    editing = null;
+  }
+  modalCloseBtn.addEventListener('click', closeSwapModal);
+  swapModalOverlay.addEventListener('click', e => { if(e.target === swapModalOverlay) closeSwapModal(); });
+  document.addEventListener('keydown', e => { if(e.key === 'Escape' && !swapModalOverlay.hidden) closeSwapModal(); });
+
+  function populateSwapDropdown(){
+    if(!editing) return;
+    const zone = zoneById(editing.zoneId);
+    const scope = currentScope();
+    let candidates;
+    if(scope === 'all'){
+      candidates = state.technicians.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    } else {
+      candidates = rosterTechs(zone);
+    }
+    swapTechSelect.innerHTML = '';
+    if(candidates.length === 0){
+      const opt = document.createElement('option');
+      opt.textContent = 'No technicians available';
+      opt.disabled = true;
+      swapTechSelect.appendChild(opt);
+      return;
+    }
+    candidates.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.name + (zone.roster.includes(t.id) ? '' : '  (borrowed)');
+      swapTechSelect.appendChild(opt);
+    });
+  }
+
+  function suggestionMetaText(sug){
+    const offVal = sug.timeOff === Infinity ? null : Math.max(0, sug.timeOff - 1);
+    const bufVal = sug.buffer === Infinity ? null : Math.max(0, sug.buffer - 1);
+    const offTxt = offVal === null ? 'no prior turns in range' : (offVal + ' wk' + (offVal===1?'':'s') + ' since last on-call');
+    const bufTxt = bufVal === null ? 'no upcoming natural turn in range' : (bufVal + ' wk' + (bufVal===1?'':'s') + ' to next turn');
+    return offTxt + ' · ' + bufTxt;
+  }
+  function refreshSuggestion(){
+    if(!editing) return;
+    const scope = currentScope();
+    const sugs = suggestTechnicians(editing.zoneId, editing.weekIndex, scope);
+    suggestionRows.innerHTML = '';
+    if(sugs.length === 0){
+      suggestionWrap.style.display = 'none';
+      return;
+    }
+    suggestionWrap.style.display = '';
+    suggestionLabel.textContent = 'Suggested cover';
+    sugs.forEach(sug => {
+      const row = document.createElement('div');
+      row.className = 'suggestion-box';
+      row.innerHTML =
+        '<div><div class="sb-name"></div><div class="sb-meta"></div></div>' +
+        '<button class="btn btn-sm" data-use-suggestion="' + sug.tech.id + '">Use</button>';
+      row.querySelector('.sb-name').textContent = sug.tech.name;
+      row.querySelector('.sb-meta').textContent = suggestionMetaText(sug);
+      suggestionRows.appendChild(row);
+    });
+  }
+  suggestionRows.addEventListener('click', e => {
+    const btn = e.target.closest('[data-use-suggestion]');
+    if(!btn) return;
+    swapTechSelect.value = btn.getAttribute('data-use-suggestion');
+  });
+
+  document.querySelectorAll('input[name="swapScope"]').forEach(r => {
+    r.addEventListener('change', () => { populateSwapDropdown(); refreshSuggestion(); });
+  });
+  document.querySelectorAll('input[name="swapMode"]').forEach(r => {
+    r.addEventListener('change', () => {
+      document.getElementById('modeSingleWrap').classList.toggle('checked', currentMode()==='single');
+      document.getElementById('modeOnwardWrap').classList.toggle('checked', currentMode()==='onward');
+    });
+  });
+
+  applySwapBtn.addEventListener('click', () => {
+    if(!editing) return;
+    const techId = swapTechSelect.value;
+    if(!techId){ modalMsg.innerHTML = '<div class="msg warn">Choose a technician first.</div>'; return; }
+    const mode = currentMode();
+    if(mode === 'single'){
+      applySingleOverride(editing.zoneId, editing.weekIndex, techId);
+    } else {
+      applyOnwardSwap(editing.zoneId, editing.weekIndex, techId);
+    }
+    closeSwapModal();
+    renderAll();
+  });
+  resetWeekBtn.addEventListener('click', () => {
+    if(!editing) return;
+    resetWeek(editing.zoneId, editing.weekIndex);
+    closeSwapModal();
+    renderAll();
+  });
+
+  boardBody.addEventListener('click', e => {
+    const swapBtn = e.target.closest('[data-swap-zone]');
+    if(swapBtn){
+      openSwapModal(swapBtn.getAttribute('data-swap-zone'), parseInt(swapBtn.getAttribute('data-swap-week'), 10));
+      return;
+    }
+    const resetBtn = e.target.closest('[data-reset-zone]');
+    if(resetBtn){
+      resetWeek(resetBtn.getAttribute('data-reset-zone'), parseInt(resetBtn.getAttribute('data-reset-week'), 10));
+      renderAll();
+    }
+  });
+
+  jumpToTodayBtn.addEventListener('click', () => {
+    document.querySelectorAll('.tape').forEach(tape => {
+      const todayChip = tape.querySelector('.week-chip.is-today');
+      if(!todayChip) return;
+      // Use actual rendered positions rather than offsetLeft, which depends on
+      // finding a positioned ancestor and silently measures from <body> if
+      // there isn't one — this avoids that whole class of bug entirely.
+      const tapeRect = tape.getBoundingClientRect();
+      const chipRect = todayChip.getBoundingClientRect();
+      const delta = (chipRect.left + chipRect.width / 2) - (tapeRect.left + tapeRect.width / 2);
+      const target = tape.scrollLeft + delta;
+      tape.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+    });
+  });
+
+  /* ---------- Boot ---------- */
+  renderAll();
+
+})();
+</script>
+</body>
+</html>

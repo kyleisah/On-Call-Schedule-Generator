@@ -41,6 +41,9 @@ Most on-call rotation tools are either a shared spreadsheet nobody trusts or a p
 
 ## Getting started
 
+To get started right away, [click here](https://kyleisah.github.io/On-Call-Schedule-Generator/On-Call%20Schedule%20Generator.html).
+
+To use this tool locally on your own machine:
 1. Download `oncall-schedule-generator.html`
 2. Open it in any modern browser — double-click the file, or host it as a static page
 3. Add a zone, add a few technicians to it, pick a start date, and the duty board fills in automatically

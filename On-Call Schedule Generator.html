@@ -862,8 +862,8 @@
     state.zones.forEach(zone => {
       (byZone[zone.id] || []).forEach(row => {
         if(!row.tech) return;
-        const summary = 'On-Call: ' + row.tech.name + ':' + zone.name;
-        let description = 'Zone: ' + zone.name + '\nTechnician: ' + row.tech.name;
+        const summary = 'On-Call: ' + row.tech.name + ' - ' + zone.name;
+        let description = 'Technician: ' + row.tech.name + '\nZone: ' + zone.name;
         if(row.holidayLabels.length > 0) description += '\nObserved Holiday: ' + row.holidayLabels.join(', ');
         if(row.isOverride) description += '\nNote: Covering an adjusted shift';
         lines.push('BEGIN:VEVENT');
